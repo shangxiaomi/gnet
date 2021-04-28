@@ -35,12 +35,12 @@ var listenerBacklogMaxSize = maxListenerBacklog()
 
 func getTCPSockaddr(proto, addr string) (sa unix.Sockaddr, family int, tcpAddr *net.TCPAddr, err error) {
 	var tcpVersion string
-
+	// 将给定的协议和地址转换长tcp地址
 	tcpAddr, err = net.ResolveTCPAddr(proto, addr)
 	if err != nil {
 		return
 	}
-
+	// 检查是否是tcp协议
 	tcpVersion, err = determineTCPProto(proto, tcpAddr)
 	if err != nil {
 		return
@@ -129,10 +129,21 @@ func tcpReusablePort(proto, addr string, reusePort bool) (fd int, netAddr net.Ad
 		}
 	}()
 
+	/*
+		SO_REUSEADDR只有针对time-wait链接(linux系统time-wait连接持续时间为1min)，确保server重启成功的这一个作用，至于网上有文章说：如果有socket绑定了0.0.0.0:port；设置该参数后，其他socket可以绑定本机ip:port。本人经过试验后均提示“Address already in use”错误，绑定失败。
+	*/
 	if err = os.NewSyscallError("setsockopt", unix.SetsockoptInt(fd, unix.SOL_SOCKET, unix.SO_REUSEADDR, 1)); err != nil {
 		return
 	}
 
+	/*
+		https://zhuanlan.zhihu.com/p/35367402
+		SO_REUSEPORT使用场景：linux kernel 3.9 引入了最新的SO_REUSEPORT选项，使得多进程或者多线程创建多个绑定同一个ip:port的监听socket，提高服务器的接收链接的并发能力,程序的扩展性更好；此时需要设置SO_REUSEPORT（注意所有进程都要设置才生效）。
+
+		setsockopt(listenfd, SOL_SOCKET, SO_REUSEPORT,(const void *)&reuse , sizeof(int));
+
+		目的：每一个进程有一个独立的监听socket，并且bind相同的ip:port，独立的listen()和accept()；提高接收连接的能力。（例如nginx多进程同时监听同一个ip:port）
+	*/
 	if reusePort {
 		if err = os.NewSyscallError("setsockopt", unix.SetsockoptInt(fd, unix.SOL_SOCKET, unix.SO_REUSEPORT, 1)); err != nil {
 			return
@@ -143,6 +154,7 @@ func tcpReusablePort(proto, addr string, reusePort bool) (fd int, netAddr net.Ad
 		return
 	}
 
+	// 进行端口监听
 	// Set backlog size to the maximum.
 	err = os.NewSyscallError("listen", unix.Listen(fd, listenerBacklogMaxSize))
 

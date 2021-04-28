@@ -272,11 +272,13 @@ func Serve(eventHandler EventHandler, protoAddr string, opts ...Option) (err err
 	network, addr := parseProtoAddr(protoAddr)
 
 	var ln *listener
+	// 初始化Listen，最后调用unix.Listen()接口进行端口监听
+	// network 是网络类型, addr 是监听地址， 重用接口是什么意思？
 	if ln, err = initListener(network, addr, options.ReusePort); err != nil {
 		return
 	}
 	defer ln.close()
-
+	// 开启服务，通过传入listener对象实现上下文关联
 	return serve(eventHandler, ln, options, protoAddr)
 }
 

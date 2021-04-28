@@ -33,7 +33,7 @@ func (svr *server) activateMainReactor(lockOSThread bool) {
 	}
 
 	defer svr.signalShutdown()
-
+	// 主Reactor 设置为mainLoop，赋值监听连接，并注册读事件
 	err := svr.mainLoop.poller.Polling(func(fd int, ev uint32) error { return svr.acceptNewConnection(fd) })
 	svr.logger.Infof("Main reactor is exiting due to error: %v", err)
 }

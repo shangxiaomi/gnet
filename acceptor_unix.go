@@ -31,6 +31,7 @@ import (
 )
 
 func (svr *server) acceptNewConnection(fd int) error {
+	// 建立连接，产生新的fd
 	nfd, sa, err := unix.Accept(fd)
 	if err != nil {
 		if err == unix.EAGAIN {
@@ -43,10 +44,13 @@ func (svr *server) acceptNewConnection(fd int) error {
 	}
 
 	netAddr := netpoll.SockaddrToTCPOrUnixAddr(sa)
+	// 从负载均衡获取eventLoop
 	el := svr.lb.next(netAddr)
 	c := newTCPConn(nfd, el, sa, netAddr)
 
+	// 注册异步的任务
 	err = el.poller.Trigger(func() (err error) {
+		// 在这里将读事件注册到epoll中
 		if err = el.poller.AddRead(nfd); err != nil {
 			_ = unix.Close(nfd)
 			c.releaseTCP()

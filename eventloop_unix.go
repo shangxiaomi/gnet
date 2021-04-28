@@ -124,7 +124,8 @@ func (el *eventloop) loopOpen(c *conn) error {
 	return el.handleAction(c, action)
 }
 
-func (el *eventloop) loopRead(c *conn) error {
+func (el *eventloop)   loopRead(c *conn) error {
+	// 判断是否有可读数据
 	n, err := unix.Read(c.fd, el.packet)
 	if n == 0 || err != nil {
 		if err == unix.EAGAIN {
@@ -134,6 +135,7 @@ func (el *eventloop) loopRead(c *conn) error {
 	}
 	c.buffer = el.packet[:n]
 
+	// 反复进行数据读入
 	for inFrame, _ := c.read(); inFrame != nil; inFrame, _ = c.read() {
 		out, action := el.eventHandler.React(inFrame, c)
 		if out != nil {

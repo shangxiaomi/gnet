@@ -139,7 +139,9 @@ func (svr *server) activateEventLoops(numEventLoop int) (err error) {
 }
 
 func (svr *server) activateReactors(numEventLoop int) error {
+	// 创建numEventLoop个eventLoop
 	for i := 0; i < numEventLoop; i++ {
+		// 为每一个eventLoop设置一个poller
 		if p, err := netpoll.OpenPoller(); err == nil {
 			el := new(eventloop)
 			el.ln = svr.ln
@@ -149,6 +151,7 @@ func (svr *server) activateReactors(numEventLoop int) error {
 			el.connections = make(map[int]*conn)
 			el.eventHandler = svr.eventHandler
 			el.calibrateCallback = svr.lb.calibrate
+			// 将eventLoop注册到 负载均衡上
 			svr.lb.register(el)
 
 			// Start the ticker.
@@ -160,21 +163,26 @@ func (svr *server) activateReactors(numEventLoop int) error {
 		}
 	}
 
+	// 开启从Reactor
 	// Start sub reactors in background.
 	svr.startSubReactors()
 
+	// 创建eventLoop
 	if p, err := netpoll.OpenPoller(); err == nil {
 		el := new(eventloop)
 		el.ln = svr.ln
 		el.idx = -1
 		el.svr = svr
+		// 在这里将epoll fd 赋值给主Reactor
 		el.poller = p
+		// 在这里将listener 监听的fd添加到epoll的读事件
 		_ = el.poller.AddRead(el.ln.fd)
 		svr.mainLoop = el
 
 		// Start main reactor in background.
 		svr.wg.Add(1)
 		go func() {
+			// 开启主Reactor， 主Reactor什么时候进程运行呢？
 			svr.activateMainReactor(svr.opts.LockOSThread)
 			svr.wg.Done()
 		}()
@@ -190,6 +198,7 @@ func (svr *server) start(numEventLoop int) error {
 		return svr.activateEventLoops(numEventLoop)
 	}
 
+	// 启动reactor模式
 	return svr.activateReactors(numEventLoop)
 }
 
@@ -244,8 +253,10 @@ func serve(eventHandler EventHandler, listener *listener, options *Options, prot
 	svr := new(server)
 	svr.opts = options
 	svr.eventHandler = eventHandler
+	// 设置监听器
 	svr.ln = listener
 
+	// 负载均衡
 	switch options.LB {
 	case RoundRobin:
 		svr.lb = new(roundRobinLoadBalancer)
@@ -278,7 +289,7 @@ func serve(eventHandler EventHandler, listener *listener, options *Options, prot
 	case Shutdown:
 		return nil
 	}
-
+	// 开启服务
 	if err := svr.start(numEventLoop); err != nil {
 		svr.closeEventLoops()
 		svr.logger.Errorf("gnet server is stopping with error: %v", err)
