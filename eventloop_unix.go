@@ -110,17 +110,21 @@ func (el *eventloop) loopAccept(fd int) error {
 
 func (el *eventloop) loopOpen(c *conn) error {
 	c.opened = true
+	// 负载均衡对象进行索引的计算
 	el.calibrateCallback(el, 1)
 
+	// TODO 这是一个钩子函数，本来的实现不会返回任何数据，触发时机是当连接建立时。
 	out, action := el.eventHandler.OnOpened(c)
 	if out != nil {
 		c.open(out)
 	}
 
+	// TODO 这里的outbounduffer是只会在上面的钩子函数中改写，还是所有的goroutine都可能会改写
 	if !c.outboundBuffer.IsEmpty() {
 		_ = el.poller.AddWrite(c.fd)
 	}
 
+	// 处理上面钩子函数返回的action
 	return el.handleAction(c, action)
 }
 

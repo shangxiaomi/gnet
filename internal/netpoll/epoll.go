@@ -41,6 +41,7 @@ type Poller struct {
 	wfd            int    // wake fd
 	wfdBuf         []byte // wfd buffer to read packet
 	netpollWakeSig int32
+	// 这个异步线程队列是每个线程独享的
 	asyncTaskQueue queue.AsyncTaskQueue
 }
 
@@ -94,6 +95,7 @@ func (p *Poller) Trigger(task queue.Task) (err error) {
 	return os.NewSyscallError("write", err)
 }
 
+// 每一个reactor实际执行循环的函数
 // Polling blocks the current goroutine, waiting for network-events.
 func (p *Poller) Polling(callback func(fd int, ev uint32) error) error {
 	// 创建时间列表集合
@@ -107,6 +109,7 @@ func (p *Poller) Polling(callback func(fd int, ev uint32) error) error {
 		n, err := unix.EpollWait(p.fd, el.events, msec)
 		if n == 0 || (n < 0 && err == unix.EINTR) {
 			msec = -1
+			// 主动让出cpu调度
 			runtime.Gosched()
 			continue
 		} else if err != nil {
@@ -117,7 +120,7 @@ func (p *Poller) Polling(callback func(fd int, ev uint32) error) error {
 
 		for i := 0; i < n; i++ {
 			// 主进程在这里一定是一直可读
-			// TODO 这里的fd会不会包含其他eventloop的wfd ??????
+			// TODO 这里的fd会不会包含其他eventloop的wfd ?????? 应该是会包括的，否则也不会进行判断
 			if fd := int(el.events[i].Fd); fd != p.wfd {
 				// 回调函数，当有读事件发生时执行回调函数
 				switch err = callback(fd, el.events[i].Events); err {
@@ -128,6 +131,7 @@ func (p *Poller) Polling(callback func(fd int, ev uint32) error) error {
 					logging.DefaultLogger.Warnf("Error occurs in event-loop: %v", err)
 				}
 			} else {
+				// TODO 这里对于eventFd的读写有什么意义？？？？？是goroutine间进行相互唤醒吗？
 				wakenUp = true
 				// 唤醒wfd ?
 				// 如果内核计数器为0，就会一直阻塞在这里
@@ -169,6 +173,10 @@ func (p *Poller) Polling(callback func(fd int, ev uint32) error) error {
 			}
 			atomic.StoreInt32(&p.netpollWakeSig, 0)
 			// 这里怎么解读？
+			// 尝试解读1，因为每个异步任务队列是一个eventPoll独享的，所以这里写入一定会成功，
+			// 这里为了性能不是每一个都去检查是否有异步任务，而是通过eventFD尽心消息通知？？
+			// 这里感觉有点脱裤子放屁？
+			// TODO 如果异步队列不空，就写入数据，使得wfd上发生可读时间，触发上述逻辑，猜测这里是为了防止
 			if !p.asyncTaskQueue.Empty() {
 				// 将缓冲区的8字节正兴致加到内核计数器上
 				/*
@@ -188,6 +196,7 @@ func (p *Poller) Polling(callback func(fd int, ev uint32) error) error {
 				来源：掘金
 				著作权归作者所有。商业转载请联系作者获得授权，非商业转载请注明出处。
 				*/
+				// TODO 这里为什么要循环写入？？？
 				for _, err = unix.Write(p.wfd, b); err == unix.EINTR || err == unix.EAGAIN; _, err = unix.Write(p.wfd, b) {
 				}
 			}

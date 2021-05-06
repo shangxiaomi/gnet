@@ -273,7 +273,11 @@ func Serve(eventHandler EventHandler, protoAddr string, opts ...Option) (err err
 
 	var ln *listener
 	// 初始化Listen，最后调用unix.Listen()接口进行端口监听
-	// network 是网络类型, addr 是监听地址， 重用接口是什么意思？
+	// network 是网络类型, addr 是监听地址，重用接口是什么意思？
+	/*
+	SO_REUSEADDR 的作用
+	1. 允许启动一个监听服务器并捆绑其众所周知的接口，及时以前建立的将该端口用作其本地端口的连接依然存在。
+	 */
 	if ln, err = initListener(network, addr, options.ReusePort); err != nil {
 		return
 	}

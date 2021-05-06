@@ -49,6 +49,8 @@ func (svr *server) activateSubReactor(el *eventloop, lockOSThread bool) {
 		svr.signalShutdown()
 	}()
 
+	// 副reactor池负责读写操作，
+	// Polling函数中进行循环处理读写事件
 	err := el.poller.Polling(func(fd int, ev uint32) error {
 		if c, ack := el.connections[fd]; ack {
 			// Don't change the ordering of processing EPOLLOUT | EPOLLRDHUP / EPOLLIN unless you're 100%
@@ -62,11 +64,13 @@ func (svr *server) activateSubReactor(el *eventloop, lockOSThread bool) {
 			// In either case loopWrite() should take care of it properly:
 			// 1) writing data back,
 			// 2) closing the connection.
+			// 处理写事件，
 			if ev&netpoll.OutEvents != 0 {
 				if err := el.loopWrite(c); err != nil {
 					return err
 				}
 			}
+			// TODO 待确认，通过判断语句得出结论，写事件优先处理
 			// If there is pending data in outbound buffer, then we should omit this readable event
 			// and prioritize the writable events to achieve a higher performance.
 			//

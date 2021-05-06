@@ -50,13 +50,15 @@ func (svr *server) acceptNewConnection(fd int) error {
 
 	// 注册异步的任务
 	err = el.poller.Trigger(func() (err error) {
-		// 在这里将读事件注册到epoll中
+		// 在这里将连接的读事件注册到epoll中
+		// 这里就是要执行的异步事件
 		if err = el.poller.AddRead(nfd); err != nil {
 			_ = unix.Close(nfd)
 			c.releaseTCP()
 			return
 		}
 		el.connections[nfd] = c
+		// TODO ???????循环开始是啥意思？？？？
 		err = el.loopOpen(c)
 		return
 	})
